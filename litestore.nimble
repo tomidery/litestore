@@ -27,6 +27,12 @@ installExt    = @["nim", "c", "h", "json", "ico"]
 
 requires "nim >= 1.4.4", "jwt >= 0.2", "nimgen", "duktape"
 
+before install:
+  when dirExists(thisModuleFile.parentDir / "packages"):
+    echo "packages already installed"
+  else:  
+    exec "nifty install"
+
 # Build
 
 const
