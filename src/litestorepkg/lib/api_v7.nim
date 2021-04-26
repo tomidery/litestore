@@ -1007,7 +1007,10 @@ proc serveFile*(req: LSRequest, LS: LiteStore, id: string): LSResponse =
         except:
           return resError(Http500, "Unable to read file '$1'." % path)
       else:
-        return resError(Http404, "File '$1' not found." % path)
+        if LS.renderMarkdown and path.endsWith(".md"):
+          return renderNotFoundFile(LS, path, req)
+        else:  
+          return resError(Http404, "File '$1' not found." % path)
     else:
       return resError(Http405, "Method not allowed: $1" % $req.reqMethod)
 

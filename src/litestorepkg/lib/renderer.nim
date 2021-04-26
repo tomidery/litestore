@@ -101,14 +101,14 @@ proc handleToc(contents: string, hasToc: var bool): string =
 type
   TagPair = tuple[prefix: string, value: string]
 
-proc renderHtml(contents: string, getFragment: proc (name: string): string, findDocument: proc (name: string): string, getSpecialContent: proc (name: string): string, baseUrl, specialBaseUrl: string, tags: openArray[string]): string =
+proc renderHtml(contents: string, getFragment: proc (name: string): string, findDocument: proc (name: string): string, getSpecialContent: proc (name: string): string, baseUrl, specialBaseUrl: string, tags: openArray[string], initFields: HastyFields): string =
   ## render markdown as HTML using HastyScribe
   
   try:  
     # process YAML metadata and convert it into fields for HastyScribe
     # remove metadata from the document as Discount cannot handle it 
-    # (it can handle pandoc metadata but it is too limiting)
-    var fields = HastyFields()  
+    # (it can handle pandoc metadata but it is too limiting)    
+    var fields = initFields
     var document = contents
     var hasMetadata = handleYamlMetadata(document, fields)
     LOG.debug("YAML metadata $1", hasMetadata)
@@ -434,7 +434,7 @@ proc renderMarkdownDocument*(LS: LiteStore, id: string, options = newQueryOption
     proc findDocument(name: string):string = findDocumentId(LS, name)      
     proc getSpecialContent(name: string):string = getSpecialDocumentContent(specialStore, name)   
     
-    let html = markdown.renderHtml(getFragment, findDocument, getSpecialContent, baseUrl, specialBaseUrl, tags)
+    let html = markdown.renderHtml(getFragment, findDocument, getSpecialContent, baseUrl, specialBaseUrl, tags, HastyFields())
     result.headers = ctHeader("text/html")
     setOrigin(LS, req, result.headers)
     result.content = html
@@ -443,26 +443,49 @@ proc renderMarkdownDocument*(LS: LiteStore, id: string, options = newQueryOption
     return resError(Http500, "Unable to render document '$1'." % id)
 
 
+
+
+proc renderMarkdownFileContent(LS: LiteStore, markdown, dir: string, tags: openArray[string], fields: HastyFields, req: LSRequest): LSResponse =
+  ## render give markdown file content 
+
+  let cache = buildCache(LS.directory)
+  proc getFragment(name: string):string = findSpecialFile(dir, name)
+  proc findDocument(name: string):string = findFile(cache, name)
+  proc getSpecialContent(name: string):string = getSpecialFileContent(LS.directory, name)   
+
+  let html = markdown.renderHtml(getFragment, findDocument, getSpecialContent, "/dir/", "/dir/", tags, fields)    
+  result.headers = ctHeader("text/html")
+  setOrigin(LS, req, result.headers)
+  result.content = html
+  result.code = Http200    
+
+
 proc renderMarkdownFile*(LS: LiteStore, path: string, req: LSRequest): LSResponse =  
   ## render given markdown file to HTML 
 
-  let parts = path.splitFile()
-  
+  let parts = path.splitFile()  
   if not path.fileExists:
     return resError(Http404, "File '$1' not found." % path)
   let tags = getTagsForFile(path)  
-
   try:
     let markdown = path.readFile
-    let cache = buildCache(LS.directory)
-    proc getFragment(name: string):string = findSpecialFile(parts.dir, name)
-    proc findDocument(name: string):string = findFile(cache, name)
-    proc getSpecialContent(name: string):string = getSpecialFileContent(LS.directory, name)   
-    
-    let html = markdown.renderHtml(getFragment, findDocument, getSpecialContent,"/dir/", "/dir/", tags)    
-    result.headers = ctHeader("text/html")
-    setOrigin(LS, req, result.headers)
-    result.content = html
-    result.code = Http200    
+    return renderMarkdownFileContent(LS, markdown, parts.dir, tags, HastyFields(), req)      
+  except:
+    return resError(Http500, "Unable to read and render file '$1'." % path)
+
+proc renderNotFoundFile*(LS: LiteStore, path: string, req: LSRequest): LSResponse =  
+  ## handle page not found event, search for a file which name starts with _NotFound
+  ## and render it instead of the missing file
+
+  let parts = path.splitFile()
+  let tags = newSeq[string]()
+  var fields = HastyFields()
+  fields["req_document"] = parts.name
+  fields["req_dir"] = parts.dir
+  var markdown = findSpecialFile(parts.dir, "NotFound")
+  if markdown == "":
+     markdown = "Document '$1' not found" % parts.name   
+  try:
+    return renderMarkdownFileContent(LS, markdown, parts.dir, tags, fields, req)      
   except:
     return resError(Http500, "Unable to read and render file '$1'." % path)
