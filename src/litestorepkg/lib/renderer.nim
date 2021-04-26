@@ -6,7 +6,8 @@ import
   json,
   os,
   tables,
-  strtabs
+  strtabs,
+  sugar
 
 {.passL: "-Lpackages/hastyscribe/src/hastyscribepkg/vendor".}  
 import  
@@ -97,6 +98,8 @@ proc handleToc(contents: string, hasToc: var bool): string =
     hasToc = true
     return #replace only the first occurence
 
+type
+  TagPair = tuple[prefix: string, value: string]
 
 proc renderHtml(contents: string, getFragment: proc (name: string): string, findDocument: proc (name: string): string, getSpecialContent: proc (name: string): string, baseUrl, specialBaseUrl: string, tags: openArray[string]): string =
   ## render markdown as HTML using HastyScribe
@@ -137,6 +140,17 @@ proc renderHtml(contents: string, getFragment: proc (name: string): string, find
         fields["system-tags"] = systemTags.join(" ")
       if userTags.len > 0:
         fields["tags"] = userTags.join(" ")
+        # for every prefix in userTags create a separate field
+        let pairs = userTags
+          .map(proc (t:string): TagPair =
+            let parts = t.split(":", maxsplit = 1)
+            return (parts[0], parts[1]))
+        let prefixes = pairs.map(proc (t:TagPair): string = t.prefix).deduplicate()
+        for prefix in prefixes:
+          let values = collect(newSeq):
+            for pair in pairs:
+              if pair.prefix == prefix: pair.value
+          fields["tag-" & prefix] = values.join(" ")                
     
     # create and configure instance of the renderer, use pre-populated fields
     # disable most options, they are handled manually later in this function
@@ -323,15 +337,10 @@ proc findSpecialDocument(LS: LiteStore, dirId, name:string): string =
 
 proc findDocumentId(LS: LiteStore, name:string): string =
   ## Search for a markdown document of given name (last part of the document id)
-  ## and return the full document id with the extension changed to .htm  
+  ## and return the full document id
   let searchId = "%/" & name & ".md"
   LOG.debug("Search $1: '$2'", name, searchId)
-  let docId = LS.store.findDocumentId(searchId)
-  if docId != "":
-    result = docId.changeFileExt(".htm")    
-  else:
-    result = ""
-
+  result = LS.store.findDocumentId(searchId)  
 
 proc getSpecialDocumentContent(LS: LiteStore, name: string): string =      
   result = ""
@@ -358,20 +367,20 @@ proc findSpecialFile(dir, name:string): string =
 
 proc buildCache(root:string): StringTableRef =
   ## Search for all markdown files in given directory (and subdirectories)
-  ## and build a cache of name (without extension) to path with .htm extension changed
+  ## and build a cache of name (without extension) to path
   ## used to speed up finding WikiLinks
   var cache = newStringTable()
   for file in walkDirRec(root):
     let parts = file.splitFile
     if parts.ext.cmpIgnoreCase(".md") == 0:
-      let targetName = file.changeFileExt(".htm").replace("\\", "/")[len(root) .. ^1]
+      let targetName = file.replace("\\", "/")[len(root) .. ^1]
       if not cache.hasKey(parts.name):
         cache[parts.name] = targetName    
   return cache       
 
 proc findFile(cache:StringTableRef, name:string): string =
   ## Search for a markdown file of given name in the cache
-  ## and return the relative file path (without root) converted to URL and with the extension changed to .htm
+  ## and return the relative file path (without root) converted to URL
   if cache.hasKey(name):
     result = cache[name]
   else:
@@ -434,20 +443,6 @@ proc renderMarkdownDocument*(LS: LiteStore, id: string, options = newQueryOption
     return resError(Http500, "Unable to render document '$1'." % id)
 
 
-proc tryRenderMarkdownDocument*(LS: LiteStore, id: string, options = newQueryOptions(), req: LSRequest): LSResponse =  
-  ## render given document to HTML when the requested document had HTML extension
-  ## and the corresponding markdown document exists
-  
-  let parts = id.splitFile()
-  if parts.ext.cmpIgnoreCase(".htm") != 0 and parts.ext.cmpIgnoreCase(".html") != 0:
-    return resDocumentNotFound(id)    
-
-   # if requested document was HTML then check if the corresponding MD document exists
-  let mdId = id.changeFileExt("md") 
-  return renderMarkdownDocument(LS, mdId, options, req)
-
-
-
 proc renderMarkdownFile*(LS: LiteStore, path: string, req: LSRequest): LSResponse =  
   ## render given markdown file to HTML 
 
@@ -471,15 +466,3 @@ proc renderMarkdownFile*(LS: LiteStore, path: string, req: LSRequest): LSRespons
     result.code = Http200    
   except:
     return resError(Http500, "Unable to read and render file '$1'." % path)
-
-proc tryRenderMarkdownFile*(LS: LiteStore, path: string, req: LSRequest): LSResponse =  
-  ## render given file to HTML when the requested file had HTML extension
-  ## and the corresponding markdown file exists
-
-  let parts = path.splitFile()
-  if parts.ext.cmpIgnoreCase(".htm") != 0 and parts.ext.cmpIgnoreCase(".html") != 0:
-    return resError(Http404, "File '$1' not found." % path)
-  else:
-    # if requested file was HTML then check if the corresponding MD file exists
-    let mdPath = path.changeFileExt(".md")
-    return renderMarkdownFile(LS, mdPath, req)    
