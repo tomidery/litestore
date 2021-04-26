@@ -480,8 +480,8 @@ proc renderNotFoundFile*(LS: LiteStore, path: string, req: LSRequest): LSRespons
   let parts = path.splitFile()
   let tags = newSeq[string]()
   var fields = HastyFields()
-  fields["req_document"] = parts.name
-  fields["req_dir"] = parts.dir
+  fields["req-doc"] = parts.name
+  fields["req-dir"] = parts.dir
   var markdown = findSpecialFile(parts.dir, "NotFound")
   if markdown == "":
      markdown = "Document '$1' not found" % parts.name   
