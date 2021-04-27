@@ -396,19 +396,11 @@ proc getSpecialFileContent(dir, name: string): string =
       result = path.readFile      
     except:
       discard
-  
-proc renderMarkdownDocument*(LS: LiteStore, id: string, options = newQueryOptions(), req: LSRequest): LSResponse =
-  ## render given markdown document to HTML 
+ 
 
-  let mdDoc = LS.store.retrieveRawDocument(id, options)
-  if mdDoc == "":
-    return resDocumentNotFound(id)
-  let jdoc = mdDoc.parseJson
+proc renderMarkdownDocumentContent(LS: LiteStore, markdown, dir: string, tags: openArray[string], fields: HastyFields, req: LSRequest): LSResponse =
+  ## render given markdown document content 
 
-  let data = jdoc["data"].getStr
-  var tags = newSeq[string]()
-  for tag in jdoc["tags"].items:
-    tags.add(tag.str)
   # detect if the URL contained store id
   var storeId = ""
   for sId, ls in pairs(LSDICT):
@@ -427,26 +419,59 @@ proc renderMarkdownDocument*(LS: LiteStore, id: string, options = newQueryOption
     specialStore = LSDICT["master"]    
     specialBaseUrl = "/docs/"
 
+  proc getFragment(name: string):string = findSpecialDocument(LS, dir, name)
+  proc findDocument(name: string):string = findDocumentId(LS, name)
+  proc getSpecialContent(name: string):string = getSpecialDocumentContent(specialStore, name)   
+  
+  let html = markdown.renderHtml(getFragment, findDocument, getSpecialContent, baseUrl, specialBaseUrl, tags, fields)
+  result.headers = ctHeader("text/html")
+  setOrigin(LS, req, result.headers)
+  result.content = html
+  result.code = Http200
+
+ 
+proc renderMarkdownDocument*(LS: LiteStore, id: string, options = newQueryOptions(), req: LSRequest): LSResponse =
+  ## render given markdown document to HTML 
+
+  let mdDoc = LS.store.retrieveRawDocument(id, options)
+  if mdDoc == "":
+    return resDocumentNotFound(id)
+  let jdoc = mdDoc.parseJson
+
+  let data = jdoc["data"].getStr
+  var tags = newSeq[string]()
+  for tag in jdoc["tags"].items:
+    tags.add(tag.str)
+
+  let markdown = data
+  let parts = id.splitFile()
   try:
-    let markdown = data
-    let parts = id.splitFile()
-    proc getFragment(name: string):string = findSpecialDocument(LS, parts.dir, name)
-    proc findDocument(name: string):string = findDocumentId(LS, name)      
-    proc getSpecialContent(name: string):string = getSpecialDocumentContent(specialStore, name)   
-    
-    let html = markdown.renderHtml(getFragment, findDocument, getSpecialContent, baseUrl, specialBaseUrl, tags, HastyFields())
-    result.headers = ctHeader("text/html")
-    setOrigin(LS, req, result.headers)
-    result.content = html
-    result.code = Http200
+    return renderMarkdownDocumentContent(LS, markdown, parts.dir, tags, HastyFields(), req)      
+  except:
+    return resError(Http500, "Unable to render document '$1'." % id)
+
+
+proc renderNotFoundDocument*(LS: LiteStore, id: string, req: LSRequest): LSResponse =  
+  ## handle page not found event, search for a file which name starts with _NotFound
+  ## and render it instead of the missing file
+
+  let parts = id.splitFile()
+  let tags = newSeq[string]()
+  var fields = HastyFields()
+  fields["req-doc"] = parts.name
+  fields["req-dir"] = parts.dir
+  var markdown = findSpecialDocument(LS, parts.dir, "NotFound")
+  if markdown == "":
+     markdown = "Document '$1' not found" % parts.name   
+  try:
+    return renderMarkdownDocumentContent(LS, markdown, parts.dir, tags, fields, req)      
   except:
     return resError(Http500, "Unable to render document '$1'." % id)
 
 
 
-
 proc renderMarkdownFileContent(LS: LiteStore, markdown, dir: string, tags: openArray[string], fields: HastyFields, req: LSRequest): LSResponse =
-  ## render give markdown file content 
+  ## render given markdown file content 
 
   let cache = buildCache(LS.directory)
   proc getFragment(name: string):string = findSpecialFile(dir, name)

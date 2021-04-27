@@ -401,7 +401,10 @@ proc getDocument*(LS: LiteStore, id: string, options = newQueryOptions(), req: L
   else:      
     let doc = LS.store.retrieveDocument(id, options)
     if doc.data == "":       
-      result = resDocumentNotFound(id)
+      if LS.renderMarkdown and id.endsWith(".md"):
+        result = renderNotFoundDocument(LS, id, req)
+      else:          
+        result = resDocumentNotFound(id)
     else:
       result.headers = doc.contenttype.ctHeader
       setOrigin(LS, req, result.headers)
