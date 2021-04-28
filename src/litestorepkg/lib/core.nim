@@ -571,7 +571,7 @@ proc vacuum*(file: string) =
     quit(203)
   quit(0)
 
-proc getTagsForFile*(f: string): seq[string] =
+proc getTagsForFile(f: string): seq[string] =
   result = newSeq[string]()
   let tags_file = f.splitFile.dir / "_tags"
   if tags_file.fileExists:

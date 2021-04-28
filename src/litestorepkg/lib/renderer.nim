@@ -491,7 +491,7 @@ proc renderMarkdownFile*(LS: LiteStore, path: string, req: LSRequest): LSRespons
   let parts = path.splitFile()  
   if not path.fileExists:
     return resError(Http404, "File '$1' not found." % path)
-  let tags = getTagsForFile(path)  
+  let tags = newSeq[string]() 
   try:
     let markdown = path.readFile
     return renderMarkdownFileContent(LS, markdown, parts.dir, tags, HastyFields(), req)      
