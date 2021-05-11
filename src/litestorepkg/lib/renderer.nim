@@ -195,7 +195,7 @@ proc renderHtml(contents: string, getFragment: proc (name: string): string, find
     # Process markdown    
     var metadata = TMDMetaData(title:"", author:"", date:"", toc:"", css:"")
     document = document.md(0, metadata)
-    LOG.debug("Metadata, TOC, CSS processed");
+    LOG.debug("Metadata, TOC, CSS processed:\n$1\n...", document.substr(0,40))
 
     # get 3 Pandoc/YAML metadata values
     if metadata.title == "" and fields.hasKey("title"):
@@ -492,8 +492,8 @@ proc renderMarkdownFile*(LS: LiteStore, path: string, req: LSRequest): LSRespons
   if not path.fileExists:
     return resError(Http404, "File '$1' not found." % path)
   let tags = newSeq[string]() 
-  try:
-    let markdown = path.readFile
+  try:    
+    let markdown = path.readFile()    
     return renderMarkdownFileContent(LS, markdown, parts.dir, tags, HastyFields(), req)      
   except:
     return resError(Http500, "Unable to read and render file '$1'." % path)
