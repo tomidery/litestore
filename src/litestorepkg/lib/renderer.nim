@@ -318,6 +318,24 @@ proc renderHtml(contents: string, getFragment: proc (name: string): string, find
     LOG.warn("Exception $1", getCurrentExceptionMsg())    
 
 
+proc processIncludes(document: string, getIncludeContent: proc(name: string): string ): string =
+  ## Include files from the same folder with names specified as:
+  ## {@ file.md @}
+
+  result = document
+  let peg_include = peg"""
+    include <- '{\@' \s {@} \s '\@}'
+  """
+  for incl in document.findAll(peg_include):
+    var matches: array[0..1, string]
+    discard incl.match(peg_include, matches)
+    let name = matches[0].strip
+    LOG.debug("processing include: $1\n.", name)
+    let contents = getIncludeContent(name)
+    LOG.debug("content:\n$1\n...", contents.substr(0,40))
+    result = result.replace(incl, contents)
+   
+
 proc findSpecialDocument(LS: LiteStore, dirId, name:string): string =
   ## search for special pages (e.g. _footer.md) starting from specified directory up to the root
   var searchDir = dirId
@@ -350,6 +368,14 @@ proc getSpecialDocumentContent(LS: LiteStore, name: string): string =
     var doc = LS.store.retrieveDocument(name, options)
     result = doc.data
 
+proc getDocumentContent(LS: LiteStore, dir, name: string): string =      
+  result = ""
+  if name != "":
+    let options = newQueryOptions()
+    let id = dir & "/" & name
+    LOG.debug("Get document $1", id)
+    var doc = LS.store.retrieveDocument(id, options)
+    result = doc.data
 
 proc findSpecialFile(dir, name:string): string =
   ## search for special pages (e.g. _footer.md) starting from specified directory up to the root
@@ -443,9 +469,11 @@ proc renderMarkdownDocument*(LS: LiteStore, id: string, options = newQueryOption
   for tag in jdoc["tags"].items:
     tags.add(tag.str)
 
-  let markdown = data
+  var markdown = data
   let parts = id.splitFile()
   try:
+    proc getIncludeContent(name: string):string = getDocumentContent(LS, parts.dir, name)
+    markdown = markdown.processIncludes(getIncludeContent)   
     return renderMarkdownDocumentContent(LS, markdown, parts.dir, tags, HastyFields(), req)      
   except:
     return resError(Http500, "Unable to render document '$1'." % id)
@@ -484,7 +512,6 @@ proc renderMarkdownFileContent(LS: LiteStore, markdown, dir: string, tags: openA
   result.content = html
   result.code = Http200    
 
-
 proc renderMarkdownFile*(LS: LiteStore, path: string, req: LSRequest): LSResponse =  
   ## render given markdown file to HTML 
 
@@ -493,7 +520,9 @@ proc renderMarkdownFile*(LS: LiteStore, path: string, req: LSRequest): LSRespons
     return resError(Http404, "File '$1' not found." % path)
   let tags = newSeq[string]() 
   try:    
-    let markdown = path.readFile()    
+    var markdown = path.readFile()
+    proc getIncludeContent(name: string):string = getSpecialFileContent(parts.dir, name)
+    markdown = markdown.processIncludes(getIncludeContent)   
     return renderMarkdownFileContent(LS, markdown, parts.dir, tags, HastyFields(), req)      
   except:
     return resError(Http500, "Unable to read and render file '$1'." % path)
