@@ -211,14 +211,12 @@ proc renderHtml(contents: string, getFragment: proc (name: string): string, find
       author_footer = "<span class=\"copy\"></span> " & metadata.author & " &ndash;"
     
     var title_tag = ""
-    var header_tag = ""
     if metadata.title != "":
-      title_tag = "<title>" & metadata.title & "</title>"
-      header_tag = "<div id=\"header\"><h1>" & metadata.title & "</h1></div>"
+      title_tag = "<title>" & metadata.title & "</title>"      
     
-    var sec_class_tag = ""
-    if fields.hasKey("sec_class"):
-      sec_class_tag = "<div id=\"sec_class\"><p>" & fields["sec_class"] & "</p></div>"  
+    var sec_class_text = ""
+    if fields.hasKey("sec-class"):
+      sec_class_text = fields["sec-class"]
   
     # handle TOC if it was found in the document
     var toc = ""
@@ -287,8 +285,7 @@ proc renderHtml(contents: string, getFragment: proc (name: string): string, find
     let mapping = [
     "title", metadata.title, 
     "title_tag", title_tag, 
-    "header_tag", header_tag, 
-    "sec_class_tag", sec_class_tag,
+    "sec_class", sec_class_text,
     "author", metadata.author, 
     "author_footer", author_footer, 
     "doc_date", metadata.date, 
