@@ -89,6 +89,7 @@ type
     manageSystemData*: bool
     file*: string
     importTags*: bool
+    notSerachable*: bool
     renderMarkdown*: bool
     mount*: bool
     readonly*: bool

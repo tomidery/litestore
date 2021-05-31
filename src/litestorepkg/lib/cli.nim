@@ -19,6 +19,7 @@ var
   logLevel = "warn"
   system = false
   importTags = false
+  notSerachable = false
   renderMarkdown = false
   mount = false
   auth = newJNull()
@@ -65,6 +66,7 @@ let
     -s, --store         Specify a datastore file (default: data.db)
     --system            Set the system flag for import, export, and delete operations
     --import-tags       During import read tags from '_tags' file and apply them to imported documents from the same directory.
+    --not-searchable    During import exclude content of files and folders starting with '_' from full text search.
     --render-markdown   Automatically render markdown files to HTML if the requested id had .htm[l] extension
     -t, --type          Specify a content type for the body an operation to be executed via the execute command.
     -u, --uri           Specify an uri to execute an operation through the execute command.
@@ -165,6 +167,9 @@ proc run*() =
           of "import-tags":
             importTags = true
             cliSettings["import-tags"] = %importTags
+          of "not-searchable":
+            notSerachable = true
+            cliSettings["not-searchable"] = %notSerachable
           of "render-markdown":
             renderMarkdown = true
             cliSettings["render-markdown"] = %renderMarkdown
@@ -198,6 +203,7 @@ proc run*() =
   LS.config = configuration
   LS.configFile = configFile
   LS.importTags = importTags
+  LS.notSerachable = notSerachable
   LS.renderMarkdown = renderMarkdown
   LS.mount = mount
   LS.execution.file = exFile
